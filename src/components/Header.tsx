@@ -21,12 +21,39 @@ interface HeaderProps {
 }
 
 export default function Header({ currentView, leadCount }: HeaderProps) {
-  const { user, loading, signInWithGoogle, logout } = useFirebase();
+  const { user, loading, signInWithGoogle, signInWithSandbox, logout } = useFirebase();
   const [notifications, setNotifications] = useState([
     { id: 1, text: "Gemini personalizations are ready for Stripe B2B Leads.", time: "2 min ago" },
     { id: 2, text: "Vercel flagged with 'AI Adoption' trigger.", time: "1 hour ago" },
   ]);
   const [showNotifyDrop, setShowNotifyDrop] = useState(false);
+  const [showPopupWarning, setShowPopupWarning] = useState(false);
+  const [authErrorDetails, setAuthErrorDetails] = useState<string | null>(null);
+
+  const handleSignInClick = async () => {
+    try {
+      setAuthErrorDetails(null);
+      await signInWithGoogle();
+    } catch (err: any) {
+      console.error("Popup auth catch handler:", err);
+      if (err && (err.code === "auth/popup-closed-by-user" || err.message?.includes("popup-closed-by-user") || err.message?.includes("popup") || err.code?.includes("popup"))) {
+        setAuthErrorDetails("Secure Google Sign-In popup was blocked or closed by the browser.");
+        setShowPopupWarning(true);
+      } else {
+        setAuthErrorDetails(err?.message || "Verify your connection settings and try again.");
+        setShowPopupWarning(true);
+      }
+    }
+  };
+
+  const handleSandboxClick = async () => {
+    try {
+      await signInWithSandbox();
+      setShowPopupWarning(false);
+    } catch (e) {
+      console.error("Failed to authenticate sandbox mode", e);
+    }
+  };
 
 
   const getBreadcrumb = () => {
@@ -124,7 +151,7 @@ export default function Header({ currentView, leadCount }: HeaderProps) {
             <button 
               onClick={logout}
               title="Click to sign out"
-              className="flex items-center gap-2.5 cursor-pointer focus:outline-none hover:opacity-90 active:scale-98 transition-all group"
+              className="flex items-center gap-2.5 cursor-pointer focus:outline-none hover:opacity-90 active:scale-98 transition-all group text-left"
             >
               {user.photoURL ? (
                 <img 
@@ -142,9 +169,16 @@ export default function Header({ currentView, leadCount }: HeaderProps) {
                 <span className="text-xs font-bold text-slate-800 leading-tight group-hover:text-indigo-600 transition-colors">
                   {user.displayName || "Active User"}
                 </span>
-                <span className="text-[9px] font-mono text-indigo-600 font-semibold uppercase tracking-wider leading-none">
-                  Cloud Synced
-                </span>
+                {"isSimulated" in user ? (
+                  <span className="text-[9px] font-mono text-emerald-600 font-semibold uppercase tracking-wider leading-none flex items-center gap-1 mt-0.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                    Local Sandbox
+                  </span>
+                ) : (
+                  <span className="text-[9px] font-mono text-indigo-600 font-semibold uppercase tracking-wider leading-none">
+                    Cloud Synced
+                  </span>
+                )}
               </div>
               <LogOut className="h-3.5 w-3.5 text-slate-400 group-hover:text-red-500 transition-colors ml-0.5" />
             </button>
@@ -152,7 +186,7 @@ export default function Header({ currentView, leadCount }: HeaderProps) {
         ) : (
           <div className="flex items-center gap-2 border-l border-slate-200 pl-4">
             <button
-              onClick={signInWithGoogle}
+              onClick={handleSignInClick}
               className="px-3.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold font-sans text-xs rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer border border-indigo-100/50"
             >
               <LogIn className="h-3.5 w-3.5 text-indigo-500 animate-pulse" />
@@ -161,6 +195,61 @@ export default function Header({ currentView, leadCount }: HeaderProps) {
           </div>
         )}
       </div>
+
+      {/* Elegant Popup Blocked Warning Modal */}
+      {showPopupWarning && (
+        <div className="fixed inset-0 z-[150] flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-fade-in">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 relative animate-scale-in text-left">
+            {/* Warning Icon */}
+            <div className="w-12 h-12 rounded-full bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-600 mb-4">
+              <CloudLightning className="h-6 w-6 text-amber-500 animate-pulse" />
+            </div>
+
+            {/* Title & Body */}
+            <h3 className="text-lg font-bold text-slate-950 tracking-tight font-sans">
+              Secure Auth Popup Blocked
+            </h3>
+            
+            <p className="mt-2 text-xs text-slate-600 leading-relaxed font-sans font-light">
+              Browsers inside a sandboxed iframe (such as the AI Studio preview environment) automatically block standard Google login popups for cross-origin security.
+            </p>
+
+            <div className="my-4 p-3.5 bg-slate-50 border border-slate-100 rounded-xl font-mono text-[10px] text-slate-500">
+              <p className="font-bold text-slate-700 uppercase tracking-wider mb-1">Technical Trace:</p>
+              {authErrorDetails || "Firebase: Error (auth/popup-closed-by-user)"}
+            </div>
+
+            {/* Actions List */}
+            <div className="space-y-2.5 mt-5">
+              <button
+                onClick={() => {
+                  window.open(window.location.href, "_blank");
+                  setShowPopupWarning(false);
+                }}
+                className="w-full py-2.5 px-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-2 transition-all cursor-pointer shadow-lg shadow-indigo-600/10 active:scale-98"
+              >
+                <span>Authorize in New Tab</span>
+                <span className="text-[10px] font-normal leading-none bg-indigo-500 px-1.5 py-0.5 rounded-sm">RECOMMENDED</span>
+              </button>
+
+              <button
+                onClick={handleSandboxClick}
+                className="w-full py-2.5 px-3.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-100 font-bold text-xs rounded-xl flex items-center justify-center gap-2 transition-all cursor-pointer active:scale-98"
+              >
+                <Sparkles className="h-3.5 w-3.5 text-emerald-600" />
+                <span>Enter Local Sandbox Simulator</span>
+              </button>
+
+              <button
+                onClick={() => setShowPopupWarning(false)}
+                className="w-full py-2 border border-slate-200 hover:bg-slate-50 text-slate-600 font-medium text-xs rounded-xl transition-all cursor-pointer"
+              >
+                Close Warning
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </header>
   );
 }

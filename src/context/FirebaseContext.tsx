@@ -4,10 +4,19 @@ import { doc, getDoc, setDoc, updateDoc, collection, getDocs, writeBatch, server
 import { auth, db, googleProvider, OperationType, handleFirestoreError } from "../firebase";
 import { WorkspaceConfig, BuyingSignal, Integration, Lead } from "../types";
 
+export interface SimulatedUser {
+  uid: string;
+  email: string;
+  displayName: string;
+  photoURL: string | null;
+  isSimulated: boolean;
+}
+
 interface FirebaseContextType {
-  user: User | null;
+  user: User | SimulatedUser | null;
   loading: boolean;
   signInWithGoogle: () => Promise<User | null>;
+  signInWithSandbox: () => Promise<SimulatedUser>;
   logout: () => Promise<void>;
   
   // Cloud Firestore operations
@@ -35,10 +44,25 @@ export function useFirebase() {
 }
 
 export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<User | SimulatedUser | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Check for stored sandbox session
+    const storedSimDoc = localStorage.getItem("sandbox_user");
+    if (storedSimDoc) {
+      try {
+        const parsed = JSON.parse(storedSimDoc);
+        if (parsed && parsed.isSimulated) {
+          setUser(parsed);
+          setLoading(false);
+          return;
+        }
+      } catch (e) {
+        console.error("Failed to restore sandbox user", e);
+      }
+    }
+
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
       setLoading(false);
@@ -56,9 +80,24 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   };
 
+  const signInWithSandbox = async (): Promise<SimulatedUser> => {
+    const sandboxUser: SimulatedUser = {
+      uid: "sandbox_pilot_profile_id",
+      email: "yashasvisaroha24@gmail.com",
+      displayName: "Yashasvi Saroha",
+      photoURL: null,
+      isSimulated: true,
+    };
+    setUser(sandboxUser);
+    localStorage.setItem("sandbox_user", JSON.stringify(sandboxUser));
+    return sandboxUser;
+  };
+
   const logout = async () => {
     try {
+      localStorage.removeItem("sandbox_user");
       await signOut(auth);
+      setUser(null);
     } catch (error) {
       console.error("Error signing out:", error);
       throw error;
@@ -67,6 +106,21 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   // Helper to load all user workspace configurations, triggers, and leads
   const loadUserData = async () => {
+    const isSim = user && "isSimulated" in user;
+    if (isSim) {
+      const configStr = localStorage.getItem("sandbox_config");
+      const signalsStr = localStorage.getItem("sandbox_signals");
+      const integrationsStr = localStorage.getItem("sandbox_integrations");
+      const leadsStr = localStorage.getItem("sandbox_leads");
+
+      return {
+        config: configStr ? JSON.parse(configStr) : null,
+        signals: signalsStr ? JSON.parse(signalsStr) : null,
+        integrations: integrationsStr ? JSON.parse(integrationsStr) : null,
+        leads: leadsStr ? JSON.parse(leadsStr) : null,
+      };
+    }
+
     if (!auth.currentUser) return { config: null, signals: null, integrations: null, leads: null };
     const userId = auth.currentUser.uid;
     const userDocRef = doc(db, "users", userId);
@@ -127,6 +181,12 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   // Save/Update fundamental user Workspace configuration
   const saveWorkspaceConfig = async (config: WorkspaceConfig) => {
+    const isSim = user && "isSimulated" in user;
+    if (isSim) {
+      localStorage.setItem("sandbox_config", JSON.stringify(config));
+      return;
+    }
+
     if (!auth.currentUser) return;
     const userId = auth.currentUser.uid;
     const userDocRef = doc(db, "users", userId);
@@ -154,6 +214,24 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   // Save/Update individual signal target properties
   const saveSignal = async (signal: BuyingSignal) => {
+    const isSim = user && "isSimulated" in user;
+    if (isSim) {
+      const signalsStr = localStorage.getItem("sandbox_signals") || "[]";
+      try {
+        const signals: BuyingSignal[] = JSON.parse(signalsStr);
+        const idx = signals.findIndex((s) => s.id === signal.id);
+        if (idx > -1) {
+          signals[idx] = signal;
+        } else {
+          signals.push(signal);
+        }
+        localStorage.setItem("sandbox_signals", JSON.stringify(signals));
+      } catch (e) {
+        console.error("Sandbox saveSignal error:", e);
+      }
+      return;
+    }
+
     if (!auth.currentUser) return;
     const userId = auth.currentUser.uid;
     const signalDocRef = doc(db, "users", userId, "signals", signal.id);
@@ -167,6 +245,24 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   // Save/Update single third party integration info
   const saveIntegration = async (integration: Integration) => {
+    const isSim = user && "isSimulated" in user;
+    if (isSim) {
+      const integrationsStr = localStorage.getItem("sandbox_integrations") || "[]";
+      try {
+        const integrations: Integration[] = JSON.parse(integrationsStr);
+        const idx = integrations.findIndex((i) => i.id === integration.id);
+        if (idx > -1) {
+          integrations[idx] = integration;
+        } else {
+          integrations.push(integration);
+        }
+        localStorage.setItem("sandbox_integrations", JSON.stringify(integrations));
+      } catch (e) {
+        console.error("Sandbox saveIntegration error:", e);
+      }
+      return;
+    }
+
     if (!auth.currentUser) return;
     const userId = auth.currentUser.uid;
     const intDocRef = doc(db, "users", userId, "integrations", integration.id);
@@ -180,6 +276,24 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   // Save/Update single lead metadata
   const saveLead = async (lead: Lead) => {
+    const isSim = user && "isSimulated" in user;
+    if (isSim) {
+      const leadsStr = localStorage.getItem("sandbox_leads") || "[]";
+      try {
+        const leads: Lead[] = JSON.parse(leadsStr);
+        const idx = leads.findIndex((l) => l.id === lead.id);
+        if (idx > -1) {
+          leads[idx] = lead;
+        } else {
+          leads.push(lead);
+        }
+        localStorage.setItem("sandbox_leads", JSON.stringify(leads));
+      } catch (e) {
+        console.error("Sandbox saveLead error:", e);
+      }
+      return;
+    }
+
     if (!auth.currentUser) return;
     const userId = auth.currentUser.uid;
     const leadDocRef = doc(db, "users", userId, "leads", lead.id);
@@ -193,6 +307,12 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   // Batch-save newly simulated/scraped pipeline profiles
   const saveLeadsBatch = async (leads: Lead[]) => {
+    const isSim = user && "isSimulated" in user;
+    if (isSim) {
+      localStorage.setItem("sandbox_leads", JSON.stringify(leads));
+      return;
+    }
+
     if (!auth.currentUser) return;
     const userId = auth.currentUser.uid;
     
