@@ -1,0 +1,253 @@
+{
+  "entities": {
+    "user": {
+      "title": "User Profile",
+      "description": "User account information and active ICP brief settings",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "The firebase auth UID"
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "Email address of the user"
+        },
+        "companyWebsite": {
+          "type": "string",
+          "description": "Company website of the client company"
+        },
+        "companyDescription": {
+          "type": "string",
+          "description": "Value proposition/ICP description"
+        },
+        "targetIndustry": {
+          "type": "string",
+          "description": "Primary industry focus"
+        },
+        "targetGeography": {
+          "type": "string",
+          "description": "Target geographic markets"
+        },
+        "companySizeRange": {
+          "type": "string",
+          "description": "Average headcount sizing filter"
+        },
+        "targetPersonas": {
+          "type": "array",
+          "description": "Target job titles"
+        },
+        "fundingStages": {
+          "type": "array",
+          "description": "Target venture stages filter"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Creation timestamp"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last update timestamp"
+        }
+      },
+      "required": [
+        "userId",
+        "email"
+      ]
+    },
+    "buyingSignal": {
+      "title": "Buying Signal Filters",
+      "description": "Custom priority definitions for B2B buying event monitors",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Signal identifier"
+        },
+        "name": {
+          "type": "string",
+          "description": "Trigger name"
+        },
+        "icon": {
+          "type": "string",
+          "description": "Lucide icon string"
+        },
+        "description": {
+          "type": "string",
+          "description": "Scope description of the signal trigger"
+        },
+        "isEnabled": {
+          "type": "boolean",
+          "description": "Whether the monitor is active"
+        },
+        "priority": {
+          "type": "string",
+          "enum": ["High", "Medium", "Low"],
+          "description": "Managed priority weight categorization"
+        },
+        "score": {
+          "type": "number",
+          "description": "Numerical trigger score modifier weight"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "isEnabled",
+        "priority",
+        "score"
+      ]
+    },
+    "integration": {
+      "title": "Client Connection Endpoint",
+      "description": "CRM, Slack, email triggers authorized for flow operations",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "API provider key identifier"
+        },
+        "name": {
+          "type": "string",
+          "description": "Service name"
+        },
+        "logo": {
+          "type": "string",
+          "description": "Service shorthand acronym logo"
+        },
+        "description": {
+          "type": "string",
+          "description": "Integration behavior definition"
+        },
+        "isConnected": {
+          "type": "boolean",
+          "description": "Whether the client API token is saved and active"
+        },
+        "statusText": {
+          "type": "string",
+          "description": "Visual diagnostic status"
+        },
+        "apiKeyLabel": {
+          "type": "string",
+          "description": "Label text for instructions on the API format"
+        },
+        "apiKey": {
+          "type": "string",
+          "description": "Encrypted or hidden private client configuration token"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "isConnected",
+        "statusText"
+      ]
+    },
+    "lead": {
+      "title": "Verified Lead Ledger",
+      "description": "Scraped B2B decision makers matching high intent buy indicators",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Dossier identifier"
+        },
+        "company": {
+          "type": "string",
+          "description": "Company legal/commercial title"
+        },
+        "domain": {
+          "type": "string",
+          "description": "Primary company URL domain"
+        },
+        "contactName": {
+          "type": "string",
+          "description": "Decision maker's name"
+        },
+        "contactEmail": {
+          "type": "string",
+          "format": "email",
+          "description": "Verified personal contact email"
+        },
+        "contactTitle": {
+          "type": "string",
+          "description": "Corporate job title matched"
+        },
+        "signalDetected": {
+          "type": "string",
+          "description": "The specific signal name triggering the match"
+        },
+        "signalDate": {
+          "type": "string",
+          "description": "Relative shorthand detection window"
+        },
+        "intentScore": {
+          "type": "number",
+          "description": "Evaluated pipeline score out of 100"
+        },
+        "fundingStage": {
+          "type": "string",
+          "description": "Parsed funding tier"
+        },
+        "location": {
+          "type": "string",
+          "description": "Headquarters geography"
+        },
+        "employeeCount": {
+          "type": "number",
+          "description": "Employee headcount scale"
+        },
+        "aiSummary": {
+          "type": "string",
+          "description": "Bespoke custom AI justification description written for triggers"
+        },
+        "outreachStatus": {
+          "type": "string",
+          "enum": ["Ready", "Synced", "Pending"],
+          "description": "CRM pushing sequence stage status"
+        },
+        "outreachDraft": {
+          "type": "string",
+          "description": "Customized Gemini sequences or personalized email texts"
+        }
+      },
+      "required": [
+        "id",
+        "company",
+        "domain",
+        "contactName",
+        "contactEmail",
+        "outreachStatus"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": {
+        "$ref": "#/entities/user"
+      },
+      "description": "Primary client and workspaces overview details"
+    },
+    "/users/{userId}/signals/{signalId}": {
+      "schema": {
+        "$ref": "#/entities/buyingSignal"
+      },
+      "description": "Custom prioritized triggers weights for direct SDR pipelines"
+    },
+    "/users/{userId}/integrations/{integrationId}": {
+      "schema": {
+        "$ref": "#/entities/integration"
+      },
+      "description": "Connected target channels and pipeline synchronization keys"
+    },
+    "/users/{userId}/leads/{leadId}": {
+      "schema": {
+        "$ref": "#/entities/lead"
+      },
+      "description": "Verified lead ledger of targeted high-intent prospects"
+    }
+  }
+}

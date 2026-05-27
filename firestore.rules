@@ -1,0 +1,136 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Global Safety Net: Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper Primitives
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isVerifiedUser() && request.auth.uid == userId;
+    }
+
+    // Entity Schemas Validation
+    function isValidUser(data) {
+      return data.userId == request.auth.uid
+        && data.email is string && data.email.size() <= 200
+        && (!('companyWebsite' in data) || (data.companyWebsite is string && data.companyWebsite.size() <= 300))
+        && (!('companyDescription' in data) || (data.companyDescription is string && data.companyDescription.size() <= 2000))
+        && (!('targetIndustry' in data) || (data.targetIndustry is string && data.targetIndustry.size() <= 200))
+        && (!('targetGeography' in data) || (data.targetGeography is string && data.targetGeography.size() <= 200))
+        && (!('companySizeRange' in data) || (data.companySizeRange is string && data.companySizeRange.size() <= 100))
+        && (!('targetPersonas' in data) || (data.targetPersonas is list && data.targetPersonas.size() <= 50))
+        && (!('fundingStages' in data) || (data.fundingStages is list && data.fundingStages.size() <= 50));
+    }
+
+    function isValidSignal(data) {
+      return data.id is string && data.id.size() <= 128
+        && data.name is string && data.name.size() <= 200
+        && data.icon is string && data.icon.size() <= 100
+        && data.description is string && data.description.size() <= 1000
+        && data.isEnabled is bool
+        && data.priority is string && (data.priority == "High" || data.priority == "Medium" || data.priority == "Low")
+        && (data.score is int || data.score is float) && data.score >= 0 && data.score <= 100;
+    }
+
+    function isValidIntegration(data) {
+      return data.id is string && data.id.size() <= 128
+        && data.name is string && data.name.size() <= 200
+        && data.logo is string && data.logo.size() <= 50
+        && data.description is string && data.description.size() <= 1000
+        && data.isConnected is bool
+        && data.statusText is string && data.statusText.size() <= 200
+        && (!('apiKeyLabel' in data) || (data.apiKeyLabel is string && data.apiKeyLabel.size() <= 200))
+        && (!('apiKey' in data) || (data.apiKey is string && data.apiKey.size() <= 1000));
+    }
+
+    function isValidLead(data) {
+      return data.id is string && data.id.size() <= 128
+        && data.company is string && data.company.size() <= 200
+        && data.domain is string && data.domain.size() <= 200
+        && data.contactName is string && data.contactName.size() <= 200
+        && data.contactEmail is string && data.contactEmail.size() <= 200
+        && data.contactTitle is string && data.contactTitle.size() <= 200
+        && data.signalDetected is string && data.signalDetected.size() <= 200
+        && data.signalDate is string && data.signalDate.size() <= 100
+        && (data.intentScore is int || data.intentScore is float) && data.intentScore >= 0 && data.intentScore <= 100
+        && data.fundingStage is string && data.fundingStage.size() <= 100
+        && data.location is string && data.location.size() <= 200
+        && (data.employeeCount is int || data.employeeCount is float) && data.employeeCount >= 0
+        && data.aiSummary is string && data.aiSummary.size() <= 2000
+        && data.outreachStatus is string && (data.outreachStatus == "Ready" || data.outreachStatus == "Synced" || data.outreachStatus == "Pending")
+        && (!('outreachDraft' in data) || (data.outreachDraft is string && data.outreachDraft.size() <= 5000));
+    }
+
+    // --- Users Collection Rules ---
+    match /users/{userId} {
+      allow get: if isOwner(userId) && isValidId(userId);
+      allow create: if isOwner(userId) && isValidId(userId) && isValidUser(incoming()) && incoming().createdAt == request.time;
+      allow update: if isOwner(userId) && isValidId(userId) && isValidUser(incoming()) 
+        && incoming().userId == existing().userId 
+        && (!('createdAt' in incoming()) || incoming().createdAt == existing().createdAt)
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+             'email', 'companyWebsite', 'companyDescription', 'targetIndustry', 'targetGeography', 
+             'companySizeRange', 'targetPersonas', 'fundingStages', 'updatedAt'
+           ]);
+      allow delete: if false; // Users cannot be deleted from client
+
+      // --- Signals Child Collection Rules ---
+      match /signals/{signalId} {
+        allow get, list: if isOwner(userId) && isValidId(userId);
+        allow create: if isOwner(userId) && isValidId(userId) && isValidId(signalId) && isValidSignal(incoming());
+        allow update: if isOwner(userId) && isValidId(userId) && isValidId(signalId) && isValidSignal(incoming())
+          && incoming().id == existing().id
+          && incoming().diff(existing()).affectedKeys().hasOnly(['isEnabled', 'priority', 'score']);
+        allow delete: if isOwner(userId) && isValidId(userId) && isValidId(signalId);
+      }
+
+      // --- Integrations Child Collection Rules ---
+      match /integrations/{integrationId} {
+        allow get, list: if isOwner(userId) && isValidId(userId);
+        allow create: if isOwner(userId) && isValidId(userId) && isValidId(integrationId) && isValidIntegration(incoming());
+        allow update: if isOwner(userId) && isValidId(userId) && isValidId(integrationId) && isValidIntegration(incoming())
+          && incoming().id == existing().id
+          && incoming().diff(existing()).affectedKeys().hasOnly(['isConnected', 'statusText', 'apiKey']);
+        allow delete: if isOwner(userId) && isValidId(userId) && isValidId(integrationId);
+      }
+
+      // --- Leads Child Collection Rules ---
+      match /leads/{leadId} {
+        allow get, list: if isOwner(userId) && isValidId(userId);
+        allow create: if isOwner(userId) && isValidId(userId) && isValidId(leadId) && isValidLead(incoming());
+        allow update: if isOwner(userId) && isValidId(userId) && isValidId(leadId) && isValidLead(incoming())
+          && incoming().id == existing().id
+          && incoming().diff(existing()).affectedKeys().hasOnly([
+               'company', 'domain', 'contactName', 'contactEmail', 'contactTitle', 
+               'signalDetected', 'signalDate', 'intentScore', 'fundingStage', 'location', 
+               'employeeCount', 'aiSummary', 'outreachStatus', 'outreachDraft'
+             ]);
+        allow delete: if isOwner(userId) && isValidId(userId) && isValidId(leadId);
+      }
+    }
+  }
+}

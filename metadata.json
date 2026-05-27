@@ -1,0 +1,6 @@
+{
+  "name": "RevEngineer Signal OS",
+  "description": "Outbound intelligence and lead generation platform utilizing real-time B2B buying signals and AI personalization.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
